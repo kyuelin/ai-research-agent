@@ -58,12 +58,13 @@ def _is_private_address(hostname: str) -> bool:
 
     return False
 class _SSRFBlockingAdapter(requests.adapters.HTTPAdapter):
-    """``HTTPAdapter`` that validates the resolved IP before each request.
+    """``HTTPAdapter`` that validates hostname resolution before each request.
 
-    Performing the check inside ``send()`` — on the same resolved address that
-    ``urllib3`` will actually connect to — closes the DNS-rebinding race window
-    present when pre-flight validation and the HTTP call resolve the hostname
-    independently.
+    The adapter resolves the request hostname inside ``send()`` and blocks the
+    request if that resolution yields a loopback, private, link-local, or
+    reserved IP address. This is a best-effort SSRF mitigation and does not
+    guarantee validation of the exact address ultimately used by the underlying
+    HTTP connection.
     """
 
     def send(self, request: requests.PreparedRequest, *args, **kwargs) -> requests.Response:  # type: ignore[override]
