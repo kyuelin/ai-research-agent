@@ -14,6 +14,23 @@ from langchain_chroma import Chroma
 from config import settings
 from processing.embedder import OllamaEmbedder
 
+# ---------------------------------------------------------------------------
+# Module-level singleton — one ChromaDB connection per process
+# ---------------------------------------------------------------------------
+_default_store: Optional["ResearchVectorStore"] = None
+
+
+def get_default_store() -> "ResearchVectorStore":
+    """Return the process-wide singleton ``ResearchVectorStore``.
+
+    Lazily initialised on first call; reused on subsequent calls to avoid
+    opening redundant ChromaDB connections.
+    """
+    global _default_store
+    if _default_store is None:
+        _default_store = ResearchVectorStore()
+    return _default_store
+
 
 class ResearchVectorStore:
     """Persistent vector store for research paper chunks (ChromaDB backend)."""

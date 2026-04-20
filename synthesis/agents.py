@@ -10,43 +10,29 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from langchain_ollama import ChatOllama
-
 from config import settings
-from memory.vector_store import ResearchVectorStore
+from llm.ollama_client import OllamaClient
+from memory.vector_store import get_default_store
+from synthesis.prompts import (
+    ANALYZE_PAPERS_TEMPLATE,
+    GENERATE_IMPLEMENTATION_TEMPLATE,
+    SYNTHESIZE_FINDINGS_TEMPLATE,
+)
 from synthesis.state import ResearchState
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Shared LLM — constructed once at import time (import-safe: no network call
-# happens until `.invoke()` is called).
-# ---------------------------------------------------------------------------
-_llm = ChatOllama(
-    model=settings.OLLAMA_LLM_MODEL,
-    base_url=settings.OLLAMA_BASE_URL,
-)
-
-
-def _get_vector_store() -> ResearchVectorStore:
-    """Return a ``ResearchVectorStore`` instance with default settings."""
-    return ResearchVectorStore()
-
-
-# ---------------------------------------------------------------------------
-# Node functions
-# ---------------------------------------------------------------------------
 
 
 def retrieve_context(state: ResearchState) -> dict[str, Any]:
     """Retrieve relevant document chunks from ChromaDB for the query.
 
-    Node inputs:  ``query``
+    Node inputs:  ``query``, ``max_results`` (optional)
     Node outputs: ``retrieved_chunks``
     """
     query = state["query"]
-    store = _get_vector_store()
-    results = store.similarity_search(query, k=settings.MAX_RETRIEVAL_RESULTS)
+    k = state.get("max_results", settings.MAX_RETRIEVAL_RESULTS)
+    store = get_default_store()
+    results = store.similarity_search(query, k=k)
     chunks = [doc.page_content for doc in results]
     logger.debug("Retrieved %d chunks for query: %s", len(chunks), query)
     return {"retrieved_chunks": chunks}
@@ -55,20 +41,30 @@ def retrieve_context(state: ResearchState) -> dict[str, Any]:
 def analyze_papers(state: ResearchState) -> dict[str, Any]:
     """Analyze retrieved chunks and extract key concepts and findings.
 
-    Node inputs:  ``query``, ``retrieved_chunks``
+    Uses clustered chunks when available; falls back to scored chunks or raw
+    retrieved chunks so the node works at any point in the pipeline.
+
+    Node inputs:  ``query``, ``clusters`` | ``scores`` | ``retrieved_chunks``
     Node outputs: ``analysis``
     """
     query = state["query"]
-    chunks = state.get("retrieved_chunks", [])
-    context = "\n\n---\n\n".join(chunks) if chunks else "No context available."
+    clusters = state.get("clusters", {})
+    scored = state.get("scores", [])
 
-    prompt = (
-        f"You are a research analyst. The user asks: '{query}'\n\n"
-        f"Below are excerpts from relevant research papers:\n\n{context}\n\n"
-        "Identify and explain the key concepts, methods, and findings from these papers "
-        "that are most relevant to the query. Be concise and technical."
-    )
-    response = _llm.invoke(prompt)
+    if clusters:
+        parts = [
+            f"[Cluster: {label}]\n" + "\n---\n".join(texts)
+            for label, texts in clusters.items()
+        ]
+        context = "\n\n===\n\n".join(parts)
+    elif scored:
+        context = "\n\n---\n\n".join(c["text"] for c in scored)
+    else:
+        raw_chunks = state.get("retrieved_chunks", [])
+        context = "\n\n---\n\n".join(raw_chunks) if raw_chunks else "No context available."
+
+    prompt = ANALYZE_PAPERS_TEMPLATE.format(query=query, context=context)
+    response = OllamaClient.get_llm().invoke(prompt)
     analysis = response.content if hasattr(response, "content") else str(response)
     return {"analysis": analysis}
 
@@ -82,14 +78,8 @@ def synthesize_findings(state: ResearchState) -> dict[str, Any]:
     query = state["query"]
     analysis = state.get("analysis", "")
 
-    prompt = (
-        f"You are a research synthesis expert. The user asks: '{query}'\n\n"
-        f"Based on the following analysis of research papers:\n\n{analysis}\n\n"
-        "Synthesize the key findings into a coherent narrative. "
-        "Highlight agreements, contradictions, and research gaps. "
-        "Conclude with the current state of the art."
-    )
-    response = _llm.invoke(prompt)
+    prompt = SYNTHESIZE_FINDINGS_TEMPLATE.format(query=query, analysis=analysis)
+    response = OllamaClient.get_llm().invoke(prompt)
     synthesis = response.content if hasattr(response, "content") else str(response)
     return {"synthesis": synthesis}
 
@@ -103,18 +93,7 @@ def generate_implementation(state: ResearchState) -> dict[str, Any]:
     query = state["query"]
     synthesis = state.get("synthesis", "")
 
-    prompt = (
-        f"You are a senior AI systems engineer. The user asks: '{query}'\n\n"
-        f"Based on this research synthesis:\n\n{synthesis}\n\n"
-        "Generate a concrete, production-ready implementation plan. Include:\n"
-        "1. System architecture (modules, data flow)\n"
-        "2. Technology stack and rationale\n"
-        "3. Key algorithms or model choices\n"
-        "4. Data pipeline design\n"
-        "5. API design (endpoints, schemas)\n"
-        "6. Testing strategy\n\n"
-        "Be specific and actionable. Prefer Python, LangChain, FastAPI, and ChromaDB."
-    )
-    response = _llm.invoke(prompt)
+    prompt = GENERATE_IMPLEMENTATION_TEMPLATE.format(query=query, synthesis=synthesis)
+    response = OllamaClient.get_llm().invoke(prompt)
     plan = response.content if hasattr(response, "content") else str(response)
     return {"implementation_plan": plan}

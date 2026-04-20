@@ -55,7 +55,7 @@ class TestIngestPdf:
 
         with patch("api.main._loader.load_bytes", return_value=docs):
             with patch("api.main._chunker.chunk", return_value=chunks):
-                with patch("api.main._get_store") as mock_store_factory:
+                with patch("api.main.get_default_store") as mock_store_factory:
                     mock_store_factory.return_value.add_documents.return_value = ["id1"]
                     resp = self._post_pdf()
 
@@ -89,7 +89,7 @@ class TestIngestArxiv:
 
         with patch("api.main._loader.load_arxiv", return_value=docs):
             with patch("api.main._chunker.chunk", return_value=chunks):
-                with patch("api.main._get_store") as mock_store_factory:
+                with patch("api.main.get_default_store") as mock_store_factory:
                     mock_store_factory.return_value.add_documents.return_value = ["id1"]
                     resp = client.post(
                         "/ingest/arxiv", json={"arxiv_id": "2310.06825"}
@@ -118,7 +118,7 @@ class TestIngestUrl:
 
         with patch("api.main._loader.load_url", return_value=docs):
             with patch("api.main._chunker.chunk", return_value=chunks):
-                with patch("api.main._get_store") as mock_store_factory:
+                with patch("api.main.get_default_store") as mock_store_factory:
                     mock_store_factory.return_value.add_documents.return_value = ["id1"]
                     resp = client.post(
                         "/ingest/url",
@@ -166,6 +166,24 @@ class TestSynthesize:
         assert data["analysis"] == "analysis text"
         assert data["synthesis"] == "synthesis text"
         assert data["implementation_plan"] == "plan text"
+
+    def test_max_results_forwarded_to_graph(self) -> None:
+        """max_results from the request must be passed into graph.invoke()."""
+        fake_result = {
+            "analysis": "",
+            "synthesis": "",
+            "implementation_plan": "",
+        }
+
+        with patch("api.main.get_compiled_graph") as mock_graph_factory:
+            mock_graph = MagicMock()
+            mock_graph.invoke.return_value = fake_result
+            mock_graph_factory.return_value = mock_graph
+
+            client.post("/synthesize", json={"query": "test", "max_results": 3})
+            call_kwargs = mock_graph.invoke.call_args[0][0]
+
+        assert call_kwargs["max_results"] == 3
 
     def test_returns_500_on_graph_error(self) -> None:
         with patch(

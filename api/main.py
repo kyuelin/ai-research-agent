@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from config import settings
 from ingestion.paper_loader import PaperLoader
-from memory.vector_store import ResearchVectorStore
+from memory.vector_store import get_default_store
 from processing.chunker import DocumentChunker
 from synthesis.graph import get_compiled_graph
 
@@ -39,11 +39,6 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 _loader = PaperLoader()
 _chunker = DocumentChunker()
-
-
-def _get_store() -> ResearchVectorStore:
-    """Return a ``ResearchVectorStore`` with default settings."""
-    return ResearchVectorStore()
 
 
 # ---------------------------------------------------------------------------
@@ -107,7 +102,7 @@ async def ingest_pdf(file: UploadFile = File(...)) -> IngestResponse:
     try:
         docs = _loader.load_bytes(data, source_name=file.filename)
         chunks = _chunker.chunk(docs)
-        _get_store().add_documents(chunks)
+        get_default_store().add_documents(chunks)
     except Exception as exc:
         logger.exception("PDF ingestion failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -125,7 +120,7 @@ def ingest_arxiv(request: IngestArxivRequest) -> IngestResponse:
     try:
         docs = _loader.load_arxiv(request.arxiv_id)
         chunks = _chunker.chunk(docs)
-        _get_store().add_documents(chunks)
+        get_default_store().add_documents(chunks)
     except Exception as exc:
         logger.exception("arXiv ingestion failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -143,7 +138,7 @@ def ingest_url(request: IngestUrlRequest) -> IngestResponse:
     try:
         docs = _loader.load_url(request.url)
         chunks = _chunker.chunk(docs)
-        _get_store().add_documents(chunks)
+        get_default_store().add_documents(chunks)
     except Exception as exc:
         logger.exception("URL ingestion failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -168,7 +163,9 @@ def synthesize(request: SynthesizeRequest) -> SynthesizeResponse:
     """
     try:
         graph = get_compiled_graph()
-        result: dict[str, Any] = graph.invoke({"query": request.query})
+        result: dict[str, Any] = graph.invoke(
+            {"query": request.query, "max_results": request.max_results}
+        )
     except Exception as exc:
         logger.exception("Synthesis failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc

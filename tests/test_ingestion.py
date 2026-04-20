@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from langchain_core.documents import Document
 
-from ingestion.paper_loader import PaperLoader
+from ingestion.paper_loader import PaperLoader, _validate_scheme
 
 
 @pytest.fixture()
@@ -21,6 +21,27 @@ def loader() -> PaperLoader:
 @pytest.fixture()
 def sample_docs() -> list[Document]:
     return [Document(page_content="Hello research world", metadata={})]
+
+
+# ---------------------------------------------------------------------------
+# _validate_scheme
+# ---------------------------------------------------------------------------
+
+
+class TestValidateScheme:
+    def test_allows_http(self) -> None:
+        _validate_scheme("http://example.com/paper.pdf")  # no exception
+
+    def test_allows_https(self) -> None:
+        _validate_scheme("https://example.com/paper.pdf")
+
+    def test_rejects_ftp(self) -> None:
+        with pytest.raises(ValueError, match="not allowed"):
+            _validate_scheme("ftp://example.com/paper.pdf")
+
+    def test_rejects_missing_hostname(self) -> None:
+        with pytest.raises(ValueError, match="hostname"):
+            _validate_scheme("https:///paper.pdf")
 
 
 # ---------------------------------------------------------------------------
@@ -82,11 +103,14 @@ class TestLoadUrl:
         fake_response.content = b"%PDF-1.4 fake content"
         fake_response.raise_for_status = MagicMock()
 
-        # Patch _validate_url to skip the real DNS lookup, and requests.get
-        with patch("ingestion.paper_loader._validate_url"):
+        # Patch _validate_scheme and the SSRF-blocking session
+        with patch("ingestion.paper_loader._validate_scheme"):
             with patch(
-                "ingestion.paper_loader.requests.get", return_value=fake_response
-            ):
+                "ingestion.paper_loader._ssrf_safe_session"
+            ) as mock_session_factory:
+                mock_session = MagicMock()
+                mock_session.get.return_value = fake_response
+                mock_session_factory.return_value = mock_session
                 with patch.object(loader, "load_pdf", return_value=sample_docs):
                     docs = loader.load_url("https://example.com/paper.pdf")
 
@@ -96,11 +120,13 @@ class TestLoadUrl:
     def test_raises_on_http_error(self, loader: PaperLoader) -> None:
         import requests as req_lib
 
-        with patch("ingestion.paper_loader._validate_url"):
+        with patch("ingestion.paper_loader._validate_scheme"):
             with patch(
-                "ingestion.paper_loader.requests.get",
-                side_effect=req_lib.HTTPError("404"),
-            ):
+                "ingestion.paper_loader._ssrf_safe_session"
+            ) as mock_session_factory:
+                mock_session = MagicMock()
+                mock_session.get.side_effect = req_lib.HTTPError("404")
+                mock_session_factory.return_value = mock_session
                 with pytest.raises(req_lib.HTTPError):
                     loader.load_url("https://example.com/missing.pdf")
 

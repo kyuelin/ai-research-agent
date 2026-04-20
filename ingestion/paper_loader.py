@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
+import requests.adapters
 from langchain_core.documents import Document
 from langchain_community.document_loaders import ArxivLoader, PyPDFLoader
 
@@ -21,40 +22,60 @@ from langchain_community.document_loaders import ArxivLoader, PyPDFLoader
 _ALLOWED_SCHEMES = {"http", "https"}
 
 
-def _validate_url(url: str) -> None:
-    """Raise ``ValueError`` for URLs that could trigger SSRF.
-
-    Checks:
-    * Only ``http`` and ``https`` schemes are permitted.
-    * The resolved host must not be a loopback, link-local, or private address.
-
-    Args:
-        url: The URL to validate.
+def _is_private_address(hostname: str) -> bool:
+    """Return ``True`` if *hostname* resolves to a non-public IP address.
 
     Raises:
-        ValueError: If the URL is considered unsafe.
+        ValueError: If the hostname cannot be resolved.
     """
+    try:
+        addr = ipaddress.ip_address(socket.gethostbyname(hostname))
+    except (socket.gaierror, ValueError) as exc:
+        raise ValueError(f"Could not resolve hostname '{hostname}': {exc}") from exc
+    return addr.is_loopback or addr.is_private or addr.is_link_local or addr.is_reserved
+
+
+class _SSRFBlockingAdapter(requests.adapters.HTTPAdapter):
+    """``HTTPAdapter`` that validates the resolved IP before each request.
+
+    Performing the check inside ``send()`` — on the same resolved address that
+    ``urllib3`` will actually connect to — closes the DNS-rebinding race window
+    present when pre-flight validation and the HTTP call resolve the hostname
+    independently.
+    """
+
+    def send(self, request: requests.PreparedRequest, *args, **kwargs) -> requests.Response:  # type: ignore[override]
+        parsed = urlparse(request.url)
+        hostname = parsed.hostname
+        if not hostname:
+            raise ValueError("URL has no hostname.")
+        if _is_private_address(hostname):
+            raise ValueError(
+                f"Requests to '{hostname}' are not permitted "
+                "(loopback / private / reserved address)."
+            )
+        return super().send(request, *args, **kwargs)
+
+
+def _ssrf_safe_session() -> requests.Session:
+    """Return a ``requests.Session`` that blocks SSRF via the blocking adapter."""
+    session = requests.Session()
+    adapter = _SSRFBlockingAdapter()
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
+
+def _validate_scheme(url: str) -> None:
+    """Raise ``ValueError`` if the URL scheme is not http or https."""
     parsed = urlparse(url)
     if parsed.scheme not in _ALLOWED_SCHEMES:
         raise ValueError(
             f"URL scheme '{parsed.scheme}' is not allowed. "
             f"Only {_ALLOWED_SCHEMES} are permitted."
         )
-
-    hostname = parsed.hostname
-    if not hostname:
+    if not parsed.hostname:
         raise ValueError("URL must contain a valid hostname.")
-
-    try:
-        addr = ipaddress.ip_address(socket.gethostbyname(hostname))
-    except (socket.gaierror, ValueError) as exc:
-        raise ValueError(f"Could not resolve hostname '{hostname}': {exc}") from exc
-
-    if addr.is_loopback or addr.is_private or addr.is_link_local or addr.is_reserved:
-        raise ValueError(
-            f"Requests to '{hostname}' ({addr}) are not permitted "
-            "(loopback / private / reserved address)."
-        )
 
 
 class PaperLoader:
@@ -106,9 +127,10 @@ class PaperLoader:
     def load_url(self, url: str) -> list[Document]:
         """Download a PDF from *url* and load it.
 
-        Only public HTTP/HTTPS URLs are accepted.  Requests to loopback,
-        private, link-local, or reserved addresses are blocked to prevent
-        Server-Side Request Forgery (SSRF).
+        Only public HTTP/HTTPS URLs are accepted.  An SSRF-blocking
+        ``HTTPAdapter`` validates the resolved IP at connection time, preventing
+        DNS-rebinding attacks where the hostname resolves to a private address
+        between an initial check and the actual request.
 
         Args:
             url: A direct HTTP/HTTPS link to a PDF file.
@@ -121,8 +143,9 @@ class PaperLoader:
                 to a private/internal address.
             requests.HTTPError: If the download fails.
         """
-        _validate_url(url)
-        response = requests.get(url, timeout=30)
+        _validate_scheme(url)
+        session = _ssrf_safe_session()
+        response = session.get(url, timeout=30)
         response.raise_for_status()
 
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
