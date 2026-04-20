@@ -40,6 +40,7 @@ class DocumentChunker:
 
         Returns:
             List of chunked ``Document`` objects with preserved metadata and an
-            added ``start_index`` metadata field indicating the byte offset.
+            added ``start_index`` metadata field indicating the character index
+            within the original text.
         """
         return self._splitter.split_documents(documents)
