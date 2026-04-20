@@ -5,25 +5,37 @@ A production-ready multi-agent system that converts AI research papers into engi
 ## Architecture
 
 ```
-ingestion/          PDF / arXiv / URL paper loading
+ingestion/          PDF / arXiv / URL paper loading (SSRF-protected)
 processing/         Text chunking + Ollama embeddings
-memory/             ChromaDB-backed vector store
-synthesis/          LangGraph 4-node agent pipeline
+memory/             ChromaDB-backed vector store (singleton)
+llm/                Centralised OllamaClient singleton (chat + embeddings)
+synthesis/          LangGraph 11-node agent pipeline with feedback loop
 api/                FastAPI HTTP endpoints
 ```
 
 ### Synthesis Pipeline
 
 ```
-START → retrieve_context → analyze_papers → synthesize_findings → generate_implementation → END
+START → retrieve_context → normalize → score_chunks ←──────────────────────┐
+  → cluster_chunks → analyze_papers → synthesize_findings                   │
+  → generate_implementation → generate_prompts → track_artifacts            │
+  → create_digest → apply_feedback ──(quality ≥ 0.8 or iter ≥ 2)──→ END   │
+                              └──(quality < 0.8 and iter < 2)───────────────┘
 ```
 
 | Node | Input | Output |
 |---|---|---|
-| `retrieve_context` | `query` | `retrieved_chunks` |
-| `analyze_papers` | `query`, `retrieved_chunks` | `analysis` |
+| `retrieve_context` | `query`, `max_results` | `retrieved_chunks` |
+| `normalize` | `retrieved_chunks` | `normalized_chunks` |
+| `score_chunks` | `query`, `normalized_chunks`, `feedback` | `scores` |
+| `cluster_chunks` | `scores` | `clusters` |
+| `analyze_papers` | `query`, `clusters` \| `scores` \| `retrieved_chunks` | `analysis` |
 | `synthesize_findings` | `query`, `analysis` | `synthesis` |
 | `generate_implementation` | `query`, `synthesis` | `implementation_plan` |
+| `generate_prompts` | `implementation_plan` | `code_prompts` |
+| `track_artifacts` | `scores`, `implementation_plan`, `code_prompts` | `artifacts` |
+| `create_digest` | `query`, `synthesis`, `implementation_plan` | `digest` |
+| `apply_feedback` | `digest`, `iteration` | `feedback`, `iteration` |
 
 ## Prerequisites
 

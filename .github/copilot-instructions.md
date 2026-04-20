@@ -15,7 +15,7 @@ ingestion → scoring → clustering → synthesis → prompt generation → fee
 
 ARCHITECTURE RULES:
 
-* Follow modular structure: app/{agents,graph,memory,llm,api,core,models}
+* Follow modular structure: ingestion/, processing/, memory/, llm/, synthesis/, api/
 * Each agent is a pure function:
   def run(state: Dict[str, Any]) -> Dict[str, Any]
 * State must be a shared dict (LangGraph-compatible)
@@ -61,7 +61,7 @@ INTEGRATION RULES:
 LLM USAGE:
 
 * Use Ollama via HTTP API
-* Wrap calls in reusable client (app/llm/ollama_client.py)
+* Wrap calls in reusable client (llm/ollama_client.py)
 * Never embed raw prompts inside business logic; centralize templates
 
 ---

@@ -154,12 +154,20 @@ def ingest_url(request: IngestUrlRequest) -> IngestResponse:
 def synthesize(request: SynthesizeRequest) -> SynthesizeResponse:
     """Run the multi-agent LangGraph synthesis workflow for a research query.
 
-    The workflow executes four sequential agents:
+    The workflow executes an 11-node pipeline with a conditional feedback loop:
 
     1. **retrieve_context** — fetches relevant chunks from ChromaDB.
-    2. **analyze_papers** — extracts key concepts via the LLM.
-    3. **synthesize_findings** — produces a cross-paper narrative.
-    4. **generate_implementation** — outputs an engineering plan.
+    2. **normalize** — enforces consistent dated metadata on each chunk.
+    3. **score_chunks** — ranks chunks by novelty, practicality, adoption, and relevance.
+    4. **cluster_chunks** — groups related chunks into thematic clusters.
+    5. **analyze_papers** — extracts key concepts via the LLM.
+    6. **synthesize_findings** — produces a cross-paper narrative.
+    7. **generate_implementation** — outputs an engineering plan.
+    8. **generate_prompts** — creates code-generation prompts from the plan.
+    9. **track_artifacts** — records paper-to-solution lineage.
+    10. **create_digest** — produces a concise weekly research digest.
+    11. **apply_feedback** — evaluates digest quality and adjusts scoring weights;
+        loops back to *score_chunks* when quality < 0.8 and iteration < 2.
     """
     try:
         graph = get_compiled_graph()
