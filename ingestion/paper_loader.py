@@ -160,9 +160,9 @@ class PaperLoader:
             )
 
         # _SSRFBlockingAdapter repeats the check at connection time (layer 2).
-        session = _ssrf_safe_session()
-        response = session.get(url, timeout=30)
-        response.raise_for_status()
+        with _ssrf_safe_session() as session:
+            response = session.get(url, timeout=30)
+            response.raise_for_status()
 
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp.write(response.content)
