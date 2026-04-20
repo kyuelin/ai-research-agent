@@ -22,13 +22,34 @@ _MAX_ITERATIONS: int = 2
 # Minimum prompt-quality score (0–1) required to exit the feedback loop early.
 _QUALITY_THRESHOLD: float = 0.8
 
+# Maximum absolute adjustment accepted from LLM feedback.
+_MAX_WEIGHT_ADJUSTMENT: float = 1.0
+
+
+def _coerce_weight_adjustments(raw_adjustments: Any) -> dict[str, float]:
+    """Normalize weight adjustments to string keys and bounded float values."""
+    if not isinstance(raw_adjustments, dict):
+        return {}
+
+    adjustments: dict[str, float] = {}
+    for key, value in raw_adjustments.items():
+        try:
+            delta = float(value)
+        except (ValueError, TypeError):
+            continue
+
+        delta = max(-_MAX_WEIGHT_ADJUSTMENT, min(_MAX_WEIGHT_ADJUSTMENT, delta))
+        adjustments[str(key)] = delta
+
+    return adjustments
+
 
 def _parse_feedback(raw: str) -> dict[str, Any]:
     """Extract feedback fields from LLM JSON, with safe defaults."""
     try:
         data = json.loads(raw.strip())
         return {
-            "weight_adjustments": dict(data.get("weight_adjustments", {})),
+            "weight_adjustments": _coerce_weight_adjustments(data.get("weight_adjustments", {})),
             "prompt_quality": float(data.get("prompt_quality", 0.7)),
             "prompt_improvement": str(data.get("prompt_improvement", "")),
         }
