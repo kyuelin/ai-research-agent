@@ -53,7 +53,7 @@ def retrieve_context(state: ResearchState) -> dict[str, Any]:
 
 
 def analyze_papers(state: ResearchState) -> dict[str, Any]:
-    """Analyse retrieved chunks and extract key concepts and findings.
+    """Analyze retrieved chunks and extract key concepts and findings.
 
     Node inputs:  ``query``, ``retrieved_chunks``
     Node outputs: ``analysis``
@@ -74,7 +74,7 @@ def analyze_papers(state: ResearchState) -> dict[str, Any]:
 
 
 def synthesize_findings(state: ResearchState) -> dict[str, Any]:
-    """Synthesise the analysis into a coherent cross-paper narrative.
+    """Synthesize the analysis into a coherent cross-paper narrative.
 
     Node inputs:  ``query``, ``analysis``
     Node outputs: ``synthesis``

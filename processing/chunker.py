@@ -20,7 +20,7 @@ class DocumentChunker:
         chunk_size: int = settings.CHUNK_SIZE,
         chunk_overlap: int = settings.CHUNK_OVERLAP,
     ) -> None:
-        """Initialise the chunker.
+        """Initialize the chunker.
 
         Args:
             chunk_size: Maximum number of characters per chunk.

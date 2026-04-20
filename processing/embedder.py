@@ -20,7 +20,7 @@ class OllamaEmbedder:
         model: str = settings.OLLAMA_EMBED_MODEL,
         base_url: str = settings.OLLAMA_BASE_URL,
     ) -> None:
-        """Initialise the embedder.
+        """Initialize the embedder.
 
         Args:
             model: Name of the Ollama embedding model (e.g. ``nomic-embed-text``).
