@@ -29,12 +29,34 @@ def _is_private_address(hostname: str) -> bool:
         ValueError: If the hostname cannot be resolved.
     """
     try:
-        addr = ipaddress.ip_address(socket.gethostbyname(hostname))
-    except (socket.gaierror, ValueError) as exc:
+        addr = ipaddress.ip_address(hostname)
+    except ValueError:
+        addr = None
+
+    if addr is not None:
+        return (
+            addr.is_loopback
+            or addr.is_private
+            or addr.is_link_local
+            or addr.is_reserved
+        )
+
+    try:
+        addrinfo = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as exc:
         raise ValueError(f"Could not resolve hostname '{hostname}': {exc}") from exc
-    return addr.is_loopback or addr.is_private or addr.is_link_local or addr.is_reserved
 
+    for _, _, _, _, sockaddr in addrinfo:
+        resolved_addr = ipaddress.ip_address(sockaddr[0])
+        if (
+            resolved_addr.is_loopback
+            or resolved_addr.is_private
+            or resolved_addr.is_link_local
+            or resolved_addr.is_reserved
+        ):
+            return True
 
+    return False
 class _SSRFBlockingAdapter(requests.adapters.HTTPAdapter):
     """``HTTPAdapter`` that validates the resolved IP before each request.
 
