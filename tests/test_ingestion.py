@@ -103,16 +103,17 @@ class TestLoadUrl:
         fake_response.content = b"%PDF-1.4 fake content"
         fake_response.raise_for_status = MagicMock()
 
-        # Patch _validate_scheme and the SSRF-blocking session
+        # Patch scheme validation, explicit IP guard, and the SSRF-blocking session.
         with patch("ingestion.paper_loader._validate_scheme"):
-            with patch(
-                "ingestion.paper_loader._ssrf_safe_session"
-            ) as mock_session_factory:
-                mock_session = MagicMock()
-                mock_session.get.return_value = fake_response
-                mock_session_factory.return_value = mock_session
-                with patch.object(loader, "load_pdf", return_value=sample_docs):
-                    docs = loader.load_url("https://example.com/paper.pdf")
+            with patch("ingestion.paper_loader._is_private_address", return_value=False):
+                with patch(
+                    "ingestion.paper_loader._ssrf_safe_session"
+                ) as mock_session_factory:
+                    mock_session = MagicMock()
+                    mock_session.get.return_value = fake_response
+                    mock_session_factory.return_value = mock_session
+                    with patch.object(loader, "load_pdf", return_value=sample_docs):
+                        docs = loader.load_url("https://example.com/paper.pdf")
 
         assert docs[0].metadata["source"] == "https://example.com/paper.pdf"
         assert docs[0].metadata["source_type"] == "url"
@@ -121,14 +122,15 @@ class TestLoadUrl:
         import requests as req_lib
 
         with patch("ingestion.paper_loader._validate_scheme"):
-            with patch(
-                "ingestion.paper_loader._ssrf_safe_session"
-            ) as mock_session_factory:
-                mock_session = MagicMock()
-                mock_session.get.side_effect = req_lib.HTTPError("404")
-                mock_session_factory.return_value = mock_session
-                with pytest.raises(req_lib.HTTPError):
-                    loader.load_url("https://example.com/missing.pdf")
+            with patch("ingestion.paper_loader._is_private_address", return_value=False):
+                with patch(
+                    "ingestion.paper_loader._ssrf_safe_session"
+                ) as mock_session_factory:
+                    mock_session = MagicMock()
+                    mock_session.get.side_effect = req_lib.HTTPError("404")
+                    mock_session_factory.return_value = mock_session
+                    with pytest.raises(req_lib.HTTPError):
+                        loader.load_url("https://example.com/missing.pdf")
 
     def test_rejects_private_ip(self, loader: PaperLoader) -> None:
         """load_url must block requests to private/internal addresses."""

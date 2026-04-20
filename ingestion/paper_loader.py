@@ -127,10 +127,16 @@ class PaperLoader:
     def load_url(self, url: str) -> list[Document]:
         """Download a PDF from *url* and load it.
 
-        Only public HTTP/HTTPS URLs are accepted.  An SSRF-blocking
-        ``HTTPAdapter`` validates the resolved IP at connection time, preventing
-        DNS-rebinding attacks where the hostname resolves to a private address
-        between an initial check and the actual request.
+        Only public HTTP/HTTPS URLs are accepted.  Two layers of SSRF
+        protection are applied:
+
+        1. **Pre-request guard** — the hostname is resolved and checked before
+           ``requests`` ever opens a socket.  This satisfies static analysis
+           tools that need an explicit guard on the tainted URL value.
+        2. **``_SSRFBlockingAdapter``** — a custom ``HTTPAdapter`` that repeats
+           the IP check inside ``send()``, closing the DNS-rebinding window
+           where a hostname could be switched to a private address between the
+           pre-flight check and the actual TCP connection.
 
         Args:
             url: A direct HTTP/HTTPS link to a PDF file.
@@ -144,6 +150,16 @@ class PaperLoader:
             requests.HTTPError: If the download fails.
         """
         _validate_scheme(url)
+
+        # Explicit pre-request guard so static analysis can trace the check.
+        hostname = urlparse(url).hostname
+        if hostname and _is_private_address(hostname):
+            raise ValueError(
+                f"Requests to '{hostname}' are not permitted "
+                "(loopback / private / reserved address)."
+            )
+
+        # _SSRFBlockingAdapter repeats the check at connection time (layer 2).
         session = _ssrf_safe_session()
         response = session.get(url, timeout=30)
         response.raise_for_status()
