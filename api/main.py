@@ -17,7 +17,6 @@ from typing import Any
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
-from config import settings
 from ingestion.paper_loader import PaperLoader
 from memory.vector_store import get_default_store
 from processing.chunker import DocumentChunker
