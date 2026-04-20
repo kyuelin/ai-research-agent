@@ -6,8 +6,6 @@ natural text boundaries (paragraphs → sentences → words).
 
 from __future__ import annotations
 
-from typing import List
-
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -34,7 +32,7 @@ class DocumentChunker:
             add_start_index=True,
         )
 
-    def chunk(self, documents: List[Document]) -> List[Document]:
+    def chunk(self, documents: list[Document]) -> list[Document]:
         """Split a list of documents into overlapping text chunks.
 
         Args:

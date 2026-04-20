@@ -8,7 +8,7 @@ running state automatically.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from langchain_ollama import ChatOllama
 
@@ -38,7 +38,7 @@ def _get_vector_store() -> ResearchVectorStore:
 # ---------------------------------------------------------------------------
 
 
-def retrieve_context(state: ResearchState) -> Dict[str, Any]:
+def retrieve_context(state: ResearchState) -> dict[str, Any]:
     """Retrieve relevant document chunks from ChromaDB for the query.
 
     Node inputs:  ``query``
@@ -52,7 +52,7 @@ def retrieve_context(state: ResearchState) -> Dict[str, Any]:
     return {"retrieved_chunks": chunks}
 
 
-def analyze_papers(state: ResearchState) -> Dict[str, Any]:
+def analyze_papers(state: ResearchState) -> dict[str, Any]:
     """Analyse retrieved chunks and extract key concepts and findings.
 
     Node inputs:  ``query``, ``retrieved_chunks``
@@ -73,7 +73,7 @@ def analyze_papers(state: ResearchState) -> Dict[str, Any]:
     return {"analysis": analysis}
 
 
-def synthesize_findings(state: ResearchState) -> Dict[str, Any]:
+def synthesize_findings(state: ResearchState) -> dict[str, Any]:
     """Synthesise the analysis into a coherent cross-paper narrative.
 
     Node inputs:  ``query``, ``analysis``
@@ -94,7 +94,7 @@ def synthesize_findings(state: ResearchState) -> Dict[str, Any]:
     return {"synthesis": synthesis}
 
 
-def generate_implementation(state: ResearchState) -> Dict[str, Any]:
+def generate_implementation(state: ResearchState) -> dict[str, Any]:
     """Generate a concrete engineering implementation plan from the synthesis.
 
     Node inputs:  ``query``, ``synthesis``

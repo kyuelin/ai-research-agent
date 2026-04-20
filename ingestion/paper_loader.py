@@ -1,19 +1,60 @@
 """Ingestion module: loads research papers from PDF files, URLs, or arXiv.
 
-Each public method returns a list of ``langchain.schema.Document`` objects
-preserving the original text and enriched metadata.
+Each public method returns a list of ``langchain_core.documents.Document``
+objects preserving the original text and enriched metadata.
 """
 
 from __future__ import annotations
 
+import ipaddress
 import os
+import socket
 import tempfile
 from pathlib import Path
-from typing import List
+from urllib.parse import urlparse
 
 import requests
 from langchain_core.documents import Document
 from langchain_community.document_loaders import ArxivLoader, PyPDFLoader
+
+# Allowed URL schemes for load_url
+_ALLOWED_SCHEMES = {"http", "https"}
+
+
+def _validate_url(url: str) -> None:
+    """Raise ``ValueError`` for URLs that could trigger SSRF.
+
+    Checks:
+    * Only ``http`` and ``https`` schemes are permitted.
+    * The resolved host must not be a loopback, link-local, or private address.
+
+    Args:
+        url: The URL to validate.
+
+    Raises:
+        ValueError: If the URL is considered unsafe.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in _ALLOWED_SCHEMES:
+        raise ValueError(
+            f"URL scheme '{parsed.scheme}' is not allowed. "
+            f"Only {_ALLOWED_SCHEMES} are permitted."
+        )
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("URL must contain a valid hostname.")
+
+    try:
+        addr = ipaddress.ip_address(socket.gethostbyname(hostname))
+    except (socket.gaierror, ValueError) as exc:
+        raise ValueError(f"Could not resolve hostname '{hostname}': {exc}") from exc
+
+    if addr.is_loopback or addr.is_private or addr.is_link_local or addr.is_reserved:
+        raise ValueError(
+            f"Requests to '{hostname}' ({addr}) are not permitted "
+            "(loopback / private / reserved address)."
+        )
 
 
 class PaperLoader:
@@ -23,7 +64,7 @@ class PaperLoader:
     # Public loaders
     # ------------------------------------------------------------------
 
-    def load_pdf(self, file_path: str) -> List[Document]:
+    def load_pdf(self, file_path: str) -> list[Document]:
         """Load a research paper from a local PDF file.
 
         Args:
@@ -46,7 +87,7 @@ class PaperLoader:
             doc.metadata.setdefault("source_type", "pdf")
         return docs
 
-    def load_arxiv(self, arxiv_id: str) -> List[Document]:
+    def load_arxiv(self, arxiv_id: str) -> list[Document]:
         """Load a research paper from arXiv by its identifier.
 
         Args:
@@ -62,8 +103,12 @@ class PaperLoader:
             doc.metadata.setdefault("source_type", "arxiv")
         return docs
 
-    def load_url(self, url: str) -> List[Document]:
+    def load_url(self, url: str) -> list[Document]:
         """Download a PDF from *url* and load it.
+
+        Only public HTTP/HTTPS URLs are accepted.  Requests to loopback,
+        private, link-local, or reserved addresses are blocked to prevent
+        Server-Side Request Forgery (SSRF).
 
         Args:
             url: A direct HTTP/HTTPS link to a PDF file.
@@ -72,8 +117,11 @@ class PaperLoader:
             List of ``Document`` objects.
 
         Raises:
+            ValueError: If the URL scheme is not allowed or the host resolves
+                to a private/internal address.
             requests.HTTPError: If the download fails.
         """
+        _validate_url(url)
         response = requests.get(url, timeout=30)
         response.raise_for_status()
 
@@ -89,7 +137,7 @@ class PaperLoader:
         finally:
             os.unlink(tmp_path)
 
-    def load_bytes(self, data: bytes, source_name: str = "upload") -> List[Document]:
+    def load_bytes(self, data: bytes, source_name: str = "upload") -> list[Document]:
         """Load a PDF from raw bytes (e.g. from an HTTP file upload).
 
         Args:
@@ -110,3 +158,4 @@ class PaperLoader:
             return docs
         finally:
             os.unlink(tmp_path)
+

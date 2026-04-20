@@ -82,9 +82,13 @@ class TestLoadUrl:
         fake_response.content = b"%PDF-1.4 fake content"
         fake_response.raise_for_status = MagicMock()
 
-        with patch("ingestion.paper_loader.requests.get", return_value=fake_response):
-            with patch.object(loader, "load_pdf", return_value=sample_docs):
-                docs = loader.load_url("https://example.com/paper.pdf")
+        # Patch _validate_url to skip the real DNS lookup, and requests.get
+        with patch("ingestion.paper_loader._validate_url"):
+            with patch(
+                "ingestion.paper_loader.requests.get", return_value=fake_response
+            ):
+                with patch.object(loader, "load_pdf", return_value=sample_docs):
+                    docs = loader.load_url("https://example.com/paper.pdf")
 
         assert docs[0].metadata["source"] == "https://example.com/paper.pdf"
         assert docs[0].metadata["source_type"] == "url"
@@ -92,12 +96,26 @@ class TestLoadUrl:
     def test_raises_on_http_error(self, loader: PaperLoader) -> None:
         import requests as req_lib
 
-        with patch(
-            "ingestion.paper_loader.requests.get",
-            side_effect=req_lib.HTTPError("404"),
-        ):
-            with pytest.raises(req_lib.HTTPError):
-                loader.load_url("https://example.com/missing.pdf")
+        with patch("ingestion.paper_loader._validate_url"):
+            with patch(
+                "ingestion.paper_loader.requests.get",
+                side_effect=req_lib.HTTPError("404"),
+            ):
+                with pytest.raises(req_lib.HTTPError):
+                    loader.load_url("https://example.com/missing.pdf")
+
+    def test_rejects_private_ip(self, loader: PaperLoader) -> None:
+        """load_url must block requests to private/internal addresses."""
+        with pytest.raises(ValueError, match="not permitted"):
+            loader.load_url("http://192.168.1.1/paper.pdf")
+
+    def test_rejects_loopback(self, loader: PaperLoader) -> None:
+        with pytest.raises(ValueError, match="not permitted"):
+            loader.load_url("http://127.0.0.1/paper.pdf")
+
+    def test_rejects_non_http_scheme(self, loader: PaperLoader) -> None:
+        with pytest.raises(ValueError, match="not allowed"):
+            loader.load_url("ftp://example.com/paper.pdf")
 
 
 # ---------------------------------------------------------------------------

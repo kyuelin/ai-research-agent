@@ -7,8 +7,6 @@ integrations such as ``langchain_chroma.Chroma``.
 
 from __future__ import annotations
 
-from typing import List
-
 from langchain_ollama import OllamaEmbeddings
 
 from config import settings
@@ -32,31 +30,13 @@ class OllamaEmbedder:
 
     @property
     def embeddings(self) -> OllamaEmbeddings:
-        """The underlying LangChain ``Embeddings`` instance.
-
-        This is the object expected by ``langchain_chroma.Chroma`` and other
-        LangChain vector-store integrations.
-        """
+        """The underlying LangChain ``Embeddings`` instance."""
         return self._embeddings
 
-    def embed_texts(self, texts: List[str]) -> List[List[float]]:
-        """Embed a batch of plain text strings.
-
-        Args:
-            texts: Strings to embed.
-
-        Returns:
-            List of embedding vectors, one per input string.
-        """
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        """Embed a batch of plain text strings."""
         return self._embeddings.embed_documents(texts)
 
-    def embed_query(self, query: str) -> List[float]:
-        """Embed a single query string.
-
-        Args:
-            query: The search query.
-
-        Returns:
-            A single embedding vector.
-        """
+    def embed_query(self, query: str) -> list[float]:
+        """Embed a single query string."""
         return self._embeddings.embed_query(query)

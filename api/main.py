@@ -12,7 +12,7 @@ POST /synthesize          — run the multi-agent synthesis workflow
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
@@ -168,7 +168,7 @@ def synthesize(request: SynthesizeRequest) -> SynthesizeResponse:
     """
     try:
         graph = get_compiled_graph()
-        result: Dict[str, Any] = graph.invoke({"query": request.query})
+        result: dict[str, Any] = graph.invoke({"query": request.query})
     except Exception as exc:
         logger.exception("Synthesis failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
