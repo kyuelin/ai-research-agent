@@ -132,3 +132,12 @@ pytest tests/ -v
 ```
 
 All external services (Ollama, ChromaDB) are mocked in the test suite.
+
+## Maturity review
+
+**Maturity:** Functional research pipeline with useful building blocks, but still missing product packaging.
+
+**What remains to make this a functional application:**
+- Add a user-facing interface or orchestration layer.
+- Define deployment, secrets, and provider configuration clearly.
+- Strengthen evals, observability, and end-to-end integration tests.
