@@ -1,5 +1,6 @@
 # AI Research Agent
 
+Status: actively maintained.
 A production-ready multi-agent system that converts AI research papers into engineered systems via LangGraph, FastAPI, ChromaDB, and Ollama.
 
 ## Architecture
