@@ -3,6 +3,20 @@
 Status: actively maintained.
 A production-ready multi-agent system that converts AI research papers into engineered systems via LangGraph, FastAPI, ChromaDB, and Ollama.
 
+## Repository contents
+
+Python agent project for ingestion, memory, processing, and synthesis workflows.
+
+- `api/` — API layer and interfaces
+- `ingestion/` — document intake pipeline
+- `llm/` — LLM integration helpers
+- `memory/` — state and retrieval memory
+- `processing/` — core processing pipeline
+- `synthesis/` — result synthesis logic
+- `tests/` — test suite
+- `config.py` — runtime configuration
+- `requirements.txt` — Python dependencies
+- `pytest.ini` — pytest settings
 ## Architecture
 
 ```
